@@ -1,0 +1,246 @@
+AWSTemplateFormatVersion: 2010-09-09
+Transform: AWS::Serverless-2016-10-31
+
+Parameters:
+  BaseName:
+    Type: String
+  StageName:
+    Type: String
+  HostedZoneId:
+    Type: String
+  HostedZoneDomain:
+    Type: String
+  DBMasterUsername:
+    Type: String
+  DBMasterPassword:
+    Type: String
+
+Resources:
+  LambdaExecutionRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Sub ${BaseName}-${StageName}-${AWS::Region}-lambda-execution-role
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Action: 'sts:AssumeRole'
+            Principal:
+              Service:
+                - lambda.amazonaws.com
+                - apigateway.amazonaws.com
+      Policies:
+        - PolicyName: WriteCloudWatchLogs
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - 'logs:CreateLogGroup'
+                  - 'logs:CreateLogStream'
+                  - 'logs:PutLogEvents'
+                Resource: 'arn:aws:logs:*:*:*'
+        - PolicyName: InvokeLambdaFunction
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - 'lambda:InvokeFunction'
+                  - 'lambda:UpdateFunctionConfiguration'
+                Resource: !Sub arn:aws:lambda:${AWS::Region}:${AWS::AccountId}:function:${BaseName}-${StageName}*
+        - PolicyName: ManageCognitoResources
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - "cognito-idp:*"
+                  - "cognito-identity:*"
+                Resource: "*"
+
+        - PolicyName: DynamoDBAccess
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action: 'dynamodb:*'
+                Resource: !Sub arn:aws:dynamodb:${AWS::Region}:*:table/${BaseName}-${StageName}*
+
+        - PolicyName: S3Access
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action: 's3:*'
+                Resource: !Sub arn:aws:s3:::${BaseName}-${StageName}*
+  ApiIndex:
+    DependsOn:
+      - LambdaExecutionRole
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: !Sub ${BaseName}-${StageName}-api-index
+      Handler: index.handler
+      Runtime: python3.6
+      CodeUri: ./api_index/index.zip
+      Role: !Sub arn:aws:iam::954296845801:role/${BaseName}-${StageName}-${AWS::Region}-lambda-execution-role
+      Environment:
+        Variables:
+          STAGE: !Sub ${StageName}
+
+  CreateUserProfile:
+    DependsOn:
+      - LambdaExecutionRole
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: !Sub ${BaseName}-${StageName}-create-user-profile
+      Handler: index.handler
+      Runtime: python3.6
+      CodeUri: ./create_user_profile/index.zip
+      Role: !Sub arn:aws:iam::954296845801:role/${BaseName}-${StageName}-${AWS::Region}-lambda-execution-role
+      Environment:
+        Variables:
+          STAGE: !Sub ${StageName}
+
+  GetUserProfile:
+    DependsOn:
+      - LambdaExecutionRole
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: !Sub ${BaseName}-${StageName}-get-user-profile
+      Handler: index.handler
+      Runtime: python3.6
+      CodeUri: ./get_user_profile/index.zip
+      Role: !Sub arn:aws:iam::954296845801:role/${BaseName}-${StageName}-${AWS::Region}-lambda-execution-role
+      Environment:
+        Variables:
+          STAGE: !Sub ${StageName}
+
+  GetLatestStories:
+    DependsOn:
+      - LambdaExecutionRole
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: !Sub ${BaseName}-${StageName}-get-latest-stories
+      Handler: index.handler
+      Runtime: python3.6
+      CodeUri: ./get_latest_stories/index.zip
+      Role: !Sub arn:aws:iam::954296845801:role/${BaseName}-${StageName}-${AWS::Region}-lambda-execution-role
+      Environment:
+        Variables:
+          STAGE: !Sub ${StageName}
+
+  GetStoryProfile:
+    DependsOn:
+      - LambdaExecutionRole
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: !Sub ${BaseName}-${StageName}-get-story-profile
+      Handler: index.handler
+      Runtime: python3.6
+      CodeUri: ./get_story_profile/index.zip
+      Role: !Sub arn:aws:iam::954296845801:role/${BaseName}-${StageName}-${AWS::Region}-lambda-execution-role
+      Environment:
+        Variables:
+          STAGE: !Sub ${StageName}
+
+  GetStoryChapters:
+    DependsOn:
+      - LambdaExecutionRole
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: !Sub ${BaseName}-${StageName}-get-story-chapters
+      Handler: index.handler
+      Runtime: python3.6
+      CodeUri: ./get_story_chapters/index.zip
+      Role: !Sub arn:aws:iam::954296845801:role/${BaseName}-${StageName}-${AWS::Region}-lambda-execution-role
+      Environment:
+        Variables:
+          STAGE: !Sub ${StageName}
+
+  GetChapterContent:
+    DependsOn:
+      - LambdaExecutionRole
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: !Sub ${BaseName}-${StageName}-get-chapter-content
+      Handler: index.handler
+      Runtime: python3.6
+      CodeUri: ./get_chapter_content/index.zip
+      Role: !Sub arn:aws:iam::954296845801:role/${BaseName}-${StageName}-${AWS::Region}-lambda-execution-role
+      Environment:
+        Variables:
+          STAGE: !Sub ${StageName}
+
+  SendVerificationLink:
+    DependsOn:
+      - LambdaExecutionRole
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: !Sub ${BaseName}-${StageName}-send-verification-link
+      Handler: index.handler
+      Runtime: python3.6
+      CodeUri: ./send_verification_link/index.zip
+      Role: !Sub arn:aws:iam::954296845801:role/${BaseName}-${StageName}-${AWS::Region}-lambda-execution-role
+      Environment:
+        Variables:
+          STAGE: !Sub ${StageName}
+
+  ValidateNewAccount:
+    DependsOn:
+      - LambdaExecutionRole
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: !Sub ${BaseName}-${StageName}-validate-new-account
+      Handler: index.handler
+      Runtime: python3.6
+      CodeUri: ./validate_new_account/index.zip
+      Role: !Sub arn:aws:iam::954296845801:role/${BaseName}-${StageName}-${AWS::Region}-lambda-execution-role
+      Environment:
+        Variables:
+          STAGE: !Sub ${StageName}
+
+  ExtendAuth:
+    DependsOn:
+      - LambdaExecutionRole
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: !Sub ${BaseName}-${StageName}-extend-auth
+      Handler: index.handler
+      Runtime: python3.6
+      CodeUri: ./extend_auth/index.zip
+      Role: !Sub arn:aws:iam::954296845801:role/${BaseName}-${StageName}-${AWS::Region}-lambda-execution-role
+      Environment:
+        Variables:
+          STAGE: !Sub ${StageName}
+      Timeout: 360
+
+  MigrateUser:
+    DependsOn:
+      - LambdaExecutionRole
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: !Sub ${BaseName}-${StageName}-migrate-user
+      Handler: index.handler
+      Runtime: python3.6
+      CodeUri: ./migrate_user/index.zip
+      Role: !Sub arn:aws:iam::954296845801:role/${BaseName}-${StageName}-${AWS::Region}-lambda-execution-role
+      Environment:
+        Variables:
+          STAGE: !Sub ${StageName}
+      Timeout: 360
+
+  MigrateStory:
+    DependsOn:
+      - LambdaExecutionRole
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: !Sub ${BaseName}-${StageName}-migrate-story
+      Handler: index.handler
+      Runtime: python3.6
+      CodeUri: ./migrate_story/index.zip
+      Role: !Sub arn:aws:iam::954296845801:role/${BaseName}-${StageName}-${AWS::Region}-lambda-execution-role
+      Environment:
+        Variables:
+          STAGE: !Sub ${StageName}
+      Timeout: 360

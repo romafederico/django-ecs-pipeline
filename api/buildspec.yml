@@ -1,0 +1,26 @@
+version: 0.2
+phases:
+  pre_build:
+    commands:
+      - aws --version
+      - $(aws ecr get-login --region $AWS_DEFAULT_REGION --no-include-email)
+      - TIMESTAMP=$(date +"%Y%m%dx%H%M%S")
+      - REPOSITORY_URI=${CONTAINER_REPOSITORY}
+      - COMMIT_HASH=$(echo $CODEBUILD_RESOLVED_SOURCE_VERSION | cut -c 1-7)
+      - IMAGE_TAG=${COMMIT_HASH:=latest}
+      - cd api
+      - sed -i "s|{{ STAGE }}|$STAGE|g" Dockerfile
+      - chmod +x bin/*.sh
+  build:
+    commands:
+      - docker build -t $REPOSITORY_URI:latest .
+  post_build:
+    commands:
+      - docker push $REPOSITORY_URI:latest
+      - cd ..
+      - printf '[{"name":"bukium-'$STAGE'-task","imageUri":"%s"}]' "$REPOSITORY_URI:latest" > images.json
+
+artifacts:
+  files:
+    - api/template.yml
+    - images.json

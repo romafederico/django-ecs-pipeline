@@ -1,0 +1,9 @@
+{
+    "Parameters": {
+        "BaseName": "bukium",
+        "StageName": "production",
+        "ApiHostedZoneId": "Z2OJLYMUO9EFXC",
+        "HostedZoneId": "Z1QUIAXEFGJWWK",
+        "HostedZoneDomain": "app.bukium.com"
+    }
+}

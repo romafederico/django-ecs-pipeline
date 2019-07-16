@@ -1,0 +1,28 @@
+{
+  "database": {
+    "name": "bukium",
+    "host": "database",
+    "port": 5432,
+    "user": "bukium_db_user"
+  },
+  "email_conf": {
+    "sender_name": "Bukium - Development",
+    "from_email": "info@bukium.com",
+    "reply_to_email": "no-reply@bukium.com",
+    "host": "email-smtp.us-east-1.amazonaws.com",
+    "user": "AKIAJPYCC24GMWJGW7BA",
+    "password": "AhyxOkwUQVQ2N1VA5OBva5uF/e2IcvbO2j7UyHzj952g",
+    "tls": true,
+    "port": 587
+  },
+  "assets_conf": {
+    "aws_buckets": false,
+    "static_url": "/static/",
+    "static_root": "static",
+    "media_url": "/media/",
+    "media_root": "media"
+  },
+  "url_patterns": {
+    "activate_account": "http://localhost:3000/activate-account/{}"
+  }
+}

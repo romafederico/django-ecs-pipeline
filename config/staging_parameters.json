@@ -1,0 +1,12 @@
+{
+    "Parameters": {
+        "BaseName": "bukium",
+        "StageName": "staging",
+        "ApiHostedZoneId": "Z2OJLYMUO9EFXC",
+        "HostedZoneId": "Z1QUIAXEFGJWWK",
+        "HostedZoneDomain": "app.bukium.com",
+        "APICertificateArn": "arn:aws:acm:us-east-1:954296845801:certificate/ffc32f6a-7390-4d56-9713-a06b5850bdc6",
+        "FacebookAppId": "10154156606786566",
+        "FacebookAppSecret": "db911b6423069ffb458b124696fd749b"
+    }
+}

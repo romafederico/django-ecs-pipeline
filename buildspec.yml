@@ -1,0 +1,14 @@
+version: 0.2
+phases:
+  install:
+    commands:
+      - ls
+      - cd lambda; for function in *; do if [ -d $function ]; then cd $function; zip -rq index.zip .; cd ..; fi; done; cd ..
+      - aws cloudformation package --template-file lambda/template.yml --s3-bucket ${PIPELINE_BUCKET} --output-template-file output-lambda-template.yml --debug
+artifacts:
+  type: zip
+  files:
+    - config/testing_parameters.json
+    - api/template.yml
+    - storage/template.yml
+    - output-lambda-template.yml

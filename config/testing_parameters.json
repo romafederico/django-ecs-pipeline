@@ -1,0 +1,10 @@
+{
+    "Parameters": {
+        "BaseName": "bukium",
+        "StageName": "testing",
+        "HostedZoneId": "Z1QUIAXEFGJWWK",
+        "HostedZoneDomain": "app.bukium.com",
+        "DBMasterUsername": "testing_db_user",
+        "DBMasterPassword": "root9480"
+    }
+}

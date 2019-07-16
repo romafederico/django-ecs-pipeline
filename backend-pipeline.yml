@@ -1,0 +1,352 @@
+AWSTemplateFormatVersion: "2010-09-09"
+
+Parameters:
+  BaseName:
+    Default: bukium
+    Type: String
+  PipelineName:
+    Default: bukium-backend-pipeline
+    Type: String
+  GithubPersonalToken:
+    Type: AWS::SSM::Parameter::Value<String>
+    Default: github-romafederico-personal-token
+
+Mappings:
+  StageMap:
+    Testing:
+      Name: testing
+      DeployBucket: testing.app.bukium.com
+    Staging:
+      Name: staging
+      DeployBucket: staging.app.bukium.com
+    Production:
+      Name: production
+      DeployBucket: production.app.bukium.com
+
+Resources:
+  PipelineBucket:
+    Type: AWS::S3::Bucket
+    Properties:
+      BucketName: !Sub ${BaseName}-backend-pipeline-${AWS::Region}
+
+  ArtifactBucket:
+    Type: AWS::S3::Bucket
+    Properties:
+      BucketName: !Sub ${BaseName}-backend-artifacts-${AWS::Region}
+
+  CodeBuildRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Sub ${BaseName}-codebuild-role-${AWS::Region}
+      AssumeRolePolicyDocument:
+        Version: 2012-10-17
+        Statement:
+          -
+            Effect: Allow
+            Principal:
+              Service:
+                - codebuild.amazonaws.com
+            Action:
+              - sts:AssumeRole
+      Path: /service-role/
+      Policies:
+        - PolicyName: root
+          PolicyDocument:
+            Version: 2012-10-17
+            Statement:
+              -
+                Effect: Allow
+                Action:
+                  - s3:GetObject
+                  - s3:GetObjectVersion
+                  - s3:GetBucketVersioning
+                  - s3:PutObject
+                Resource:
+                  - !GetAtt PipelineBucket.Arn
+                  - !Join ["", [!GetAtt PipelineBucket.Arn, /*]]
+              -
+                Effect: Allow
+                Action:
+                  - s3:*
+                Resource:
+                  - !GetAtt PipelineBucket.Arn
+                  - !Join ['', [!GetAtt PipelineBucket.Arn, /*]]
+                  - !GetAtt ArtifactBucket.Arn
+                  - !Join ['', [!GetAtt ArtifactBucket.Arn, /*]]
+              -
+                Effect: Allow
+                Action:
+                  - logs:CreateLogGroup
+                  - logs:CreateLogStream
+                  - logs:PutLogEvents
+                  - cloudfront:CreateInvalidation
+                  - ecr:*
+                  - ecs:*
+                Resource:
+                  - "*"
+
+  CloudFormationRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Sub ${BaseName}-cloudformation-role-${AWS::Region}
+      AssumeRolePolicyDocument:
+        Version: 2012-10-17
+        Statement:
+          -
+            Effect: Allow
+            Principal:
+              Service:
+                - cloudformation.amazonaws.com
+            Action:
+              - sts:AssumeRole
+      Path: /
+      Policies:
+        -
+          PolicyName: CloudFormationNestedCFNAccessPolicy
+          PolicyDocument:
+            Version: 2012-10-17
+            Statement:
+              -
+                Effect: Allow
+                Action:
+                  - apigateway:*
+                  - cloudfront:*
+                  - cloudformation:*
+                  - ec2:*
+                  - ecs:*
+                  - elasticloadbalancing:*
+                  - iam:*
+                  - lambda:*
+                  - logs:*
+                  - rds:*
+                  - route53:*
+                  - route53domains:*
+                  - s3:*
+                Resource: "*"
+
+  CodePipeLineRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Sub ${BaseName}-codepipeline-role-${AWS::Region}
+      AssumeRolePolicyDocument:
+        Version: 2012-10-17
+        Statement:
+          -
+            Effect: Allow
+            Principal:
+              Service:
+                - codepipeline.amazonaws.com
+            Action:
+              - sts:AssumeRole
+      Policies:
+        - PolicyName: root
+          PolicyDocument:
+            Version: 2012-10-17
+            Statement:
+              - Effect: Allow
+                Action:
+                  - s3:*
+                Resource:
+                  - !GetAtt PipelineBucket.Arn
+                  - !Join ["", [!GetAtt PipelineBucket.Arn, /*]]
+              - Effect: Allow
+                Action:
+                  - codebuild:*
+                  - ecs:*
+                  - ecr:*
+                Resource: "*"
+              - Effect: Allow
+                Action:
+                  - cloudformation:*
+                  - iam:*
+                Resource: "*"
+
+  CodePipeline:
+    Type: AWS::CodePipeline::Pipeline
+    Properties:
+      ArtifactStore:
+        Location: !Ref PipelineBucket
+        Type: S3
+      Name: !Ref PipelineName
+      RoleArn: !GetAtt CodePipeLineRole.Arn
+      Stages:
+        - Name: Source
+          Actions:
+            - Name: Source
+              ActionTypeId:
+                Category: Source
+                Owner: ThirdParty
+                Provider: GitHub
+                Version: 1
+              Configuration:
+                Owner: romafederico
+                Branch: master
+                Repo: !Sub ${BaseName}-backend
+                OAuthToken: !Ref GithubPersonalToken
+              OutputArtifacts:
+                - Name: !Sub ${BaseName}-backend-source
+        - Name: Testing
+          Actions:
+            - Name: BuildLambda
+              RunOrder: 1
+              ActionTypeId:
+                Category: Build
+                Owner: AWS
+                Version: 1
+                Provider: CodeBuild
+              InputArtifacts:
+                - Name: !Sub ${BaseName}-backend-source
+              OutputArtifacts:
+                - Name: !Sub ${BaseName}-backend-testing-build
+              Configuration:
+                ProjectName: !Ref TestingLambdaBuild
+            - Name: BuildContainer
+              RunOrder: 1
+              ActionTypeId:
+                Category: Build
+                Owner: AWS
+                Version: 1
+                Provider: CodeBuild
+              InputArtifacts:
+                - Name: !Sub ${BaseName}-backend-source
+              Configuration:
+                ProjectName: !Ref TestingContainerBuild
+              OutputArtifacts:
+                - Name: !Sub ${BaseName}-backend-testing-container-build
+            - Name: DeployLambda
+              RunOrder: 2
+              ActionTypeId:
+                Category: Deploy
+                Owner: AWS
+                Version: 1
+                Provider: CloudFormation
+              InputArtifacts:
+                - Name: !Sub ${BaseName}-backend-testing-build
+              Configuration:
+                ActionMode: REPLACE_ON_FAILURE
+                ChangeSetName: DeployLambda
+                Capabilities: CAPABILITY_IAM,CAPABILITY_AUTO_EXPAND,CAPABILITY_NAMED_IAM
+                StackName: !Sub ${BaseName}-testing-lambda
+                TemplatePath: !Sub ${BaseName}-backend-testing-build::output-lambda-template.yml
+                TemplateConfiguration: !Sub ${BaseName}-backend-testing-build::config/testing_parameters.json
+                RoleArn: !GetAtt CloudFormationRole.Arn
+            - Name: DeployContainer
+              RunOrder: 2
+              ActionTypeId:
+                Category: Deploy
+                Owner: AWS
+                Version: 1
+                Provider: CloudFormation
+              InputArtifacts:
+                - Name: !Sub ${BaseName}-backend-testing-build
+              Configuration:
+                ActionMode: REPLACE_ON_FAILURE
+                ChangeSetName: DeployStorage
+                Capabilities: CAPABILITY_IAM,CAPABILITY_AUTO_EXPAND
+                StackName: !Sub ${BaseName}-testing-api
+                TemplatePath: !Sub ${BaseName}-backend-testing-build::api/template.yml
+                TemplateConfiguration: !Sub ${BaseName}-backend-testing-build::config/testing_parameters.json
+                RoleArn: !GetAtt CloudFormationRole.Arn
+            - Name: DeployApiCode
+              RunOrder: 4
+              ActionTypeId:
+                Category: Deploy
+                Owner: AWS
+                Version: 1
+                Provider: ECS
+              InputArtifacts:
+                - Name: !Sub ${BaseName}-backend-testing-container-build
+              Configuration:
+                ClusterName: !Sub ${BaseName}-testing-cluster
+                ServiceName: !Sub ${BaseName}-testing-service
+                FileName: images.json
+
+  TestingContainerRepository:
+    Type: AWS::ECR::Repository
+    Properties:
+      RepositoryName: !Sub ${BaseName}-testing-repository
+      LifecyclePolicy:
+        LifecyclePolicyText: |
+          {
+            "rules": [{
+              "rulePriority": 10,
+              "description": "removeuntagged images except the latest one",
+              "selection": {
+                "tagStatus": "untagged",
+                "countType": "imageCountMoreThan",
+                "countNumber": 1
+              },
+              "action": {
+                "type": "expire"
+              }
+            }]
+          }
+
+  TestingContainerBuild:
+    Type: AWS::CodeBuild::Project
+    Properties:
+      Name: !Sub ${BaseName}-backend-testing-container-build
+      ServiceRole: !GetAtt CodeBuildRole.Arn
+      Artifacts:
+        Type: CODEPIPELINE
+        Name: !Sub ${BaseName}-backend
+      Source:
+        Type: CODEPIPELINE
+        BuildSpec: api/buildspec.yml
+      Environment:
+        ComputeType: BUILD_GENERAL1_SMALL
+        EnvironmentVariables:
+          - Name: STAGE
+            Value: !FindInMap [ StageMap, Testing, Name]
+          - Name: PIPELINE_BUCKET
+            Value: !Ref PipelineBucket
+          - Name: ARTIFACT_BUCKET
+            Value: !Ref ArtifactBucket
+          - Name: CONTAINER_REPOSITORY
+            Value: !Sub ${AWS::AccountId}.dkr.ecr.${AWS::Region}.amazonaws.com/${BaseName}-testing-repository
+        Image: aws/codebuild/docker:17.09.0
+        Type: LINUX_CONTAINER
+
+  TestingLambdaBuild:
+    Type: AWS::CodeBuild::Project
+    Properties:
+      Name: !Sub ${BaseName}-backend-testing-lambda-build
+      ServiceRole: !GetAtt CodeBuildRole.Arn
+      Artifacts:
+        Type: CODEPIPELINE
+        Name: !Sub ${BaseName}-backend
+      Source:
+        Type: CODEPIPELINE
+      Environment:
+        ComputeType: BUILD_GENERAL1_SMALL
+        EnvironmentVariables:
+          - Name: STAGE
+            Value: !FindInMap [ StageMap, Testing, Name]
+          - Name: PIPELINE_BUCKET
+            Value: !Ref PipelineBucket
+          - Name: ARTIFACT_BUCKET
+            Value: !Ref ArtifactBucket
+        Image: aws/codebuild/ubuntu-base:14.04
+        Type: LINUX_CONTAINER
+
+#  StagingBuild:
+#    Type: AWS::CodeBuild::Project
+#    Properties:
+#      Name: !Sub ${BaseName}-backend-staging-build
+#      ServiceRole: !GetAtt CodeBuildRole.Arn
+#      Artifacts:
+#        Type: CODEPIPELINE
+#        Name: !Sub ${BaseName}-backend
+#      Source:
+#        Type: CODEPIPELINE
+#      Environment:
+#        ComputeType: BUILD_GENERAL1_SMALL
+#        EnvironmentVariables:
+#          - Name: STAGE
+#            Value: !FindInMap [ StageMap, Staging, Name]
+#          - Name: PIPELINE_BUCKET
+#            Value: !Ref PipelineBucket
+#          - Name: ARTIFACT_BUCKET
+#            Value: !Ref ArtifactBucket
+#        Image: aws/codebuild/ubuntu-base:14.04
+#        Type: LINUX_CONTAINER
